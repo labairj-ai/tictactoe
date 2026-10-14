@@ -1,0 +1,13 @@
+[Unit]
+Description=Tailscale daemon (tictactoe)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/sbin/tailscaled --tun=userspace-networking --socket=/run/tailscale-tictactoe/tailscaled.sock --statedir=/var/lib/tailscale-tictactoe --port=0
+RuntimeDirectory=tailscale-tictactoe
+StateDirectory=tailscale-tictactoe
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tic-Tac-Toe</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #0f1117;
+    color: #e2e8f0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .app { text-align: center; width: 100%; max-width: 420px; padding: 24px 16px; }
+
+  h1 {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    color: #e2e8f0;
+    margin-bottom: 4px;
+  }
+
+  /* ── Mode picker ── */
+  #mode-screen { }
+  #mode-screen p { color: #718096; margin-bottom: 24px; font-size: 14px; }
+
+  .mode-btns { display: flex; gap: 12px; justify-content: center; }
+  .mode-btn {
+    flex: 1;
+    padding: 20px 12px;
+    border: 2px solid #2d3748;
+    border-radius: 12px;
+    background: #1a202c;
+    color: #e2e8f0;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .mode-btn:hover { border-color: #4a90d9; background: #1e2a3a; }
+  .mode-btn .icon { font-size: 32px; display: block; margin-bottom: 8px; }
+
+  /* ── Score bar ── */
+  #game-screen { display: none; }
+
+  .score-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    gap: 8px;
+  }
+  .score-box {
+    flex: 1;
+    background: #1a202c;
+    border: 2px solid #2d3748;
+    border-radius: 10px;
+    padding: 10px 8px;
+    transition: border-color .2s;
+  }
+  .score-box.active { border-color: #4a90d9; }
+  .score-box .label { font-size: 10px; font-weight: 700; letter-spacing: .08em; color: #718096; margin-bottom: 2px; }
+  .score-box .name  { font-size: 13px; font-weight: 600; color: #e2e8f0; }
+  .score-box .val   { font-size: 26px; font-weight: 700; color: #e2e8f0; line-height: 1; margin-top: 2px; }
+  .score-box.x-box .val { color: #fc8181; }
+  .score-box.o-box .val { color: #63b3ed; }
+  .score-divider { font-size: 11px; color: #4a5568; font-weight: 700; flex-shrink: 0; }
+
+  /* ── Status ── */
+  .status {
+    font-size: 15px;
+    font-weight: 600;
+    min-height: 28px;
+    margin-bottom: 16px;
+    color: #a0aec0;
+    transition: color .2s;
+  }
+  .status.winner-x { color: #fc8181; }
+  .status.winner-o { color: #63b3ed; }
+  .status.draw     { color: #f6ad55; }
+
+  /* ── Board ── */
+  .board {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  .cell {
+    aspect-ratio: 1;
+    background: #1a202c;
+    border: 2px solid #2d3748;
+    border-radius: 10px;
+    font-size: 48px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background .12s, border-color .12s, transform .08s;
+    user-select: none;
+  }
+  .cell:hover:not(.taken):not(.locked) { background: #242c3a; border-color: #4a5568; }
+  .cell.x { color: #fc8181; }
+  .cell.o { color: #63b3ed; }
+  .cell.win-cell { background: #1e2a3a; border-color: #4a90d9; }
+  .cell.taken { cursor: default; }
+  .cell.locked { cursor: default; pointer-events: none; }
+  .cell.pop { animation: pop .15s ease-out; }
+  @keyframes pop {
+    0%   { transform: scale(.7); }
+    70%  { transform: scale(1.08); }
+    100% { transform: scale(1); }
+  }
+
+  /* ── Buttons ── */
+  .btn-row { display: flex; gap: 10px; justify-content: center; }
+  .btn {
+    padding: 9px 20px;
+    border-radius: 8px;
+    border: none;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  .btn-primary { background: #2b6cb0; color: #fff; }
+  .btn-primary:hover { background: #3182ce; }
+  .btn-ghost { background: #1a202c; color: #718096; border: 1.5px solid #2d3748; }
+  .btn-ghost:hover { background: #242c3a; color: #a0aec0; }
+
+  /* ── Thinking indicator ── */
+  .thinking { color: #4a5568; font-size: 12px; height: 16px; margin-top: -12px; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>Tic-Tac-Toe</h1>
+
+  <!-- Mode selection -->
+  <div id="mode-screen">
+    <p style="margin-top:8px">Choose a mode to start</p>
+    <div class="mode-btns">
+      <button class="mode-btn" onclick="startGame('cpu')">
+        <span class="icon">🤖</span>vs Computer
+      </button>
+      <button class="mode-btn" onclick="startGame('2p')">
+        <span class="icon">👥</span>2 Players
+      </button>
+    </div>
+  </div>
+
+  <!-- Game -->
+  <div id="game-screen">
+    <div class="score-bar">
+      <div class="score-box x-box" id="score-x">
+        <div class="label">PLAYER</div>
+        <div class="name" id="name-x">X</div>
+        <div class="val" id="val-x">0</div>
+      </div>
+      <div class="score-divider">DRAWS<br><span id="val-d" style="font-size:20px;font-weight:700;color:#a0aec0">0</span></div>
+      <div class="score-box o-box" id="score-o">
+        <div class="label">PLAYER</div>
+        <div class="name" id="name-o">O</div>
+        <div class="val" id="val-o">0</div>
+      </div>
+    </div>
+
+    <div class="status" id="status">Your turn</div>
+    <div class="thinking" id="thinking"></div>
+
+    <div class="board" id="board">
+      <div class="cell" onclick="move(0)"></div>
+      <div class="cell" onclick="move(1)"></div>
+      <div class="cell" onclick="move(2)"></div>
+      <div class="cell" onclick="move(3)"></div>
+      <div class="cell" onclick="move(4)"></div>
+      <div class="cell" onclick="move(5)"></div>
+      <div class="cell" onclick="move(6)"></div>
+      <div class="cell" onclick="move(7)"></div>
+      <div class="cell" onclick="move(8)"></div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="resetBoard()">New Game</button>
+      <button class="btn btn-ghost" onclick="changeMode()">Change Mode</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const WINS = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+
+let board, current, gameOver, mode, scores;
+
+function startGame(m) {
+  mode = m;
+  scores = { X: 0, O: 0, D: 0 };
+  document.getElementById('mode-screen').style.display = 'none';
+  document.getElementById('game-screen').style.display = '';
+  if (mode === 'cpu') {
+    document.getElementById('name-x').textContent = 'You';
+    document.getElementById('name-o').textContent = 'CPU';
+    document.querySelector('#score-x .label').textContent = 'PLAYER';
+    document.querySelector('#score-o .label').textContent = 'CPU';
+  } else {
+    document.getElementById('name-x').textContent = 'X';
+    document.getElementById('name-o').textContent = 'O';
+    document.querySelector('#score-x .label').textContent = 'PLAYER 1';
+    document.querySelector('#score-o .label').textContent = 'PLAYER 2';
+  }
+  resetBoard();
+}
+
+function changeMode() {
+  document.getElementById('game-screen').style.display = 'none';
+  document.getElementById('mode-screen').style.display = '';
+}
+
+function resetBoard() {
+  board = Array(9).fill(null);
+  current = 'X';
+  gameOver = false;
+  const cells = document.querySelectorAll('.cell');
+  cells.forEach(c => { c.textContent = ''; c.className = 'cell'; });
+  setStatus('');
+  document.getElementById('thinking').textContent = '';
+  updateScoreHighlight();
+}
+
+function setStatus(msg, cls) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = 'status' + (cls ? ' ' + cls : '');
+}
+
+function updateScoreHighlight() {
+  document.getElementById('score-x').classList.toggle('active', current === 'X' && !gameOver);
+  document.getElementById('score-o').classList.toggle('active', current === 'O' && !gameOver);
+}
+
+function updateScoreDisplay() {
+  document.getElementById('val-x').textContent = scores.X;
+  document.getElementById('val-o').textContent = scores.O;
+  document.getElementById('val-d').textContent  = scores.D;
+}
+
+function move(i) {
+  if (gameOver || board[i]) return;
+  if (mode === 'cpu' && current === 'O') return;
+  placeMove(i, current);
+  if (!gameOver && mode === 'cpu') {
+    lockBoard(true);
+    document.getElementById('thinking').textContent = 'thinking…';
+    setTimeout(() => {
+      document.getElementById('thinking').textContent = '';
+      const best = bestMove(board);
+      placeMove(best, 'O');
+      lockBoard(false);
+    }, 250);
+  }
+}
+
+function placeMove(i, player) {
+  board[i] = player;
+  const cell = document.querySelectorAll('.cell')[i];
+  cell.textContent = player === 'X' ? '✕' : '○';
+  cell.classList.add(player.toLowerCase(), 'taken', 'pop');
+  const win = checkWin(board);
+  if (win) {
+    win.forEach(idx => document.querySelectorAll('.cell')[idx].classList.add('win-cell'));
+    gameOver = true;
+    lockBoard(true);
+    const isYou = mode === 'cpu' && player === 'X';
+    const label = mode === 'cpu' ? (isYou ? 'You win! 🎉' : 'CPU wins') : `Player ${player === 'X' ? '1' : '2'} wins!`;
+    setStatus(label, player === 'X' ? 'winner-x' : 'winner-o');
+    scores[player]++;
+    updateScoreDisplay();
+  } else if (board.every(Boolean)) {
+    gameOver = true;
+    lockBoard(true);
+    setStatus("It's a draw", 'draw');
+    scores.D++;
+    updateScoreDisplay();
+  } else {
+    current = player === 'X' ? 'O' : 'X';
+    if (!gameOver) {
+      const turn = mode === 'cpu'
+        ? (current === 'X' ? 'Your turn' : '')
+        : `Player ${current === 'X' ? '1 (X)' : '2 (O)'}'s turn`;
+      setStatus(turn);
+    }
+    updateScoreHighlight();
+  }
+}
+
+function lockBoard(lock) {
+  document.querySelectorAll('.cell').forEach(c => {
+    if (lock) c.classList.add('locked');
+    else if (!c.classList.contains('taken')) c.classList.remove('locked');
+  });
+}
+
+function checkWin(b) {
+  for (const [a, bb, c] of WINS) {
+    if (b[a] && b[a] === b[bb] && b[a] === b[c]) return [a, bb, c];
+  }
+  return null;
+}
+
+/* Minimax with alpha-beta pruning */
+function score(b, depth) {
+  const w = checkWin(b);
+  if (w) return b[w[0]] === 'O' ? 10 - depth : depth - 10;
+  return 0;
+}
+
+function minimax(b, depth, isMax, alpha, beta) {
+  const s = score(b, depth);
+  if (s !== 0 || b.every(Boolean)) return s;
+  if (isMax) {
+    let best = -Infinity;
+    for (let i = 0; i < 9; i++) {
+      if (b[i]) continue;
+      b[i] = 'O';
+      best = Math.max(best, minimax(b, depth + 1, false, alpha, beta));
+      b[i] = null;
+      alpha = Math.max(alpha, best);
+      if (beta <= alpha) break;
+    }
+    return best;
+  } else {
+    let best = Infinity;
+    for (let i = 0; i < 9; i++) {
+      if (b[i]) continue;
+      b[i] = 'X';
+      best = Math.min(best, minimax(b, depth + 1, true, alpha, beta));
+      b[i] = null;
+      beta = Math.min(beta, best);
+      if (beta <= alpha) break;
+    }
+    return best;
+  }
+}
+
+function bestMove(b) {
+  let best = -Infinity, move = -1;
+  for (let i = 0; i < 9; i++) {
+    if (b[i]) continue;
+    b[i] = 'O';
+    const v = minimax(b, 0, false, -Infinity, Infinity);
+    b[i] = null;
+    if (v > best) { best = v; move = i; }
+  }
+  return move;
+}
+</script>
+</body>
+</html>
