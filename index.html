@@ -204,7 +204,7 @@ function startGame(m) {
   mode = m;
   scores = { X: 0, O: 0, D: 0 };
   document.getElementById('mode-screen').style.display = 'none';
-  document.getElementById('game-screen').style.display = '';
+  document.getElementById('game-screen').style.display = 'block';
   if (mode === 'cpu') {
     document.getElementById('name-x').textContent = 'You';
     document.getElementById('name-o').textContent = 'CPU';
@@ -221,7 +221,7 @@ function startGame(m) {
 
 function changeMode() {
   document.getElementById('game-screen').style.display = 'none';
-  document.getElementById('mode-screen').style.display = '';
+  document.getElementById('mode-screen').style.display = 'block';
 }
 
 function resetBoard() {
