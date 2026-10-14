@@ -172,6 +172,31 @@
   .btn-ghost { background: #1a202c; color: #718096; border: 1.5px solid #2d3748; }
   .btn-ghost:hover { background: #242c3a; color: #a0aec0; }
 
+  /* ── Difficulty picker ── */
+  .diff-btn {
+    width: 100%;
+    padding: 14px 18px;
+    border: 2px solid #2d3748;
+    border-radius: 12px;
+    background: #1a202c;
+    color: #e2e8f0;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    text-align: left;
+    transition: border-color .15s, background .15s;
+    margin-bottom: 10px;
+  }
+  .diff-btn:last-of-type { margin-bottom: 0; }
+  .diff-btn .d-icon { font-size: 26px; flex-shrink: 0; }
+  .diff-btn .d-name { font-size: 15px; font-weight: 700; display: block; }
+  .diff-btn .d-desc { font-size: 12px; color: #718096; display: block; margin-top: 2px; }
+  .diff-btn.easy:hover   { border-color: #68d391; background: rgba(104,211,145,.07); }
+  .diff-btn.medium:hover { border-color: #f6ad55; background: rgba(246,173,85,.07); }
+  .diff-btn.hard:hover   { border-color: #fc8181; background: rgba(252,129,129,.07); }
+
   /* ── Thinking indicator ── */
   .thinking { color: #4a5568; font-size: 12px; height: 16px; margin-top: -12px; margin-bottom: 8px; }
 
@@ -243,6 +268,24 @@
     </button>
   </div>
 
+  <!-- Difficulty selection (cpu only) -->
+  <div id="difficulty-screen" style="display:none">
+    <p class="screen-label">Choose difficulty</p>
+    <button class="diff-btn easy" onclick="pickDifficulty('easy')">
+      <span class="d-icon">😊</span>
+      <span><span class="d-name">Easy</span><span class="d-desc">Plays randomly — great for beginners</span></span>
+    </button>
+    <button class="diff-btn medium" onclick="pickDifficulty('medium')">
+      <span class="d-icon">🤔</span>
+      <span><span class="d-name">Medium</span><span class="d-desc">Blocks your wins, misses strategy</span></span>
+    </button>
+    <button class="diff-btn hard" onclick="pickDifficulty('hard')">
+      <span class="d-icon">💀</span>
+      <span><span class="d-name">Hard</span><span class="d-desc">Unbeatable — best possible move every time</span></span>
+    </button>
+    <button class="btn btn-ghost" style="margin-top:16px" onclick="show('mode-screen')">← Back</button>
+  </div>
+
   <!-- Symbol selection (cpu only) -->
   <div id="symbol-screen" style="display:none">
     <p class="screen-label">Play as…</p>
@@ -256,7 +299,7 @@
         O &nbsp;·&nbsp; Go second
       </button>
     </div>
-    <button class="btn btn-ghost" style="margin-top:16px" onclick="show('mode-screen')">← Back</button>
+    <button class="btn btn-ghost" style="margin-top:16px" onclick="show('difficulty-screen')">← Back</button>
   </div>
 
   <!-- Online: create or join -->
@@ -335,10 +378,11 @@
 
 <script>
 const WINS = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
-const ALL_SCREENS = ['mode-screen','symbol-screen','online-screen','waiting-screen','join-screen','game-screen'];
+const ALL_SCREENS = ['mode-screen','difficulty-screen','symbol-screen','online-screen','waiting-screen','join-screen','game-screen'];
 
 let board, current, gameOver, mode, scores;
 let playerSymbol = 'X', cpuSymbol = 'O';
+let difficulty = 'hard';
 
 // Online state
 let ws = null;
@@ -357,7 +401,7 @@ function pickMode(m) {
   mode = m;
   scores = { X: 0, O: 0, D: 0 };
   if (m === 'cpu') {
-    show('symbol-screen');
+    show('difficulty-screen');
   } else {
     playerSymbol = 'X'; cpuSymbol = 'O';
     document.getElementById('label-x').textContent = 'PLAYER 1';
@@ -369,14 +413,20 @@ function pickMode(m) {
   }
 }
 
+function pickDifficulty(d) {
+  difficulty = d;
+  show('symbol-screen');
+}
+
 function pickSymbol(sym) {
   playerSymbol = sym;
   cpuSymbol = sym === 'X' ? 'O' : 'X';
+  const diffLabel = {easy: 'CPU · EASY', medium: 'CPU · MED', hard: 'CPU · HARD'}[difficulty];
   if (playerSymbol === 'X') {
     document.getElementById('label-x').textContent = 'YOU';
-    document.getElementById('label-o').textContent = 'CPU';
+    document.getElementById('label-o').textContent = diffLabel;
   } else {
-    document.getElementById('label-x').textContent = 'CPU';
+    document.getElementById('label-x').textContent = diffLabel;
     document.getElementById('label-o').textContent = 'YOU';
   }
   document.getElementById('name-x').textContent = 'X';
@@ -579,7 +629,7 @@ function doResetBoard() {
     document.getElementById('thinking').textContent = 'thinking…';
     setTimeout(() => {
       document.getElementById('thinking').textContent = '';
-      placeMove(bestMove(board), cpuSymbol);
+      placeMove(cpuMove(board), cpuSymbol);
       lockBoard(false);
     }, 400);
   } else {
@@ -619,7 +669,7 @@ function move(i) {
     document.getElementById('thinking').textContent = 'thinking…';
     setTimeout(() => {
       document.getElementById('thinking').textContent = '';
-      placeMove(bestMove(board), cpuSymbol);
+      placeMove(cpuMove(board), cpuSymbol);
       lockBoard(false);
     }, 250);
   }
@@ -676,6 +726,36 @@ function checkWin(b) {
     if (b[a] && b[a] === b[bb] && b[a] === b[c]) return [a, bb, c];
   }
   return null;
+}
+
+/* Difficulty-aware CPU move selection */
+function cpuMove(b) {
+  if (difficulty === 'hard') return bestMove(b);
+  if (difficulty === 'easy') return randomMove(b);
+  return mediumMove(b);
+}
+
+function randomMove(b) {
+  const empty = b.reduce((a, v, i) => (v ? a : [...a, i]), []);
+  return empty[Math.floor(Math.random() * empty.length)];
+}
+
+function mediumMove(b) {
+  // Take an immediate win
+  for (let i = 0; i < 9; i++) {
+    if (b[i]) continue;
+    b[i] = cpuSymbol;
+    if (checkWin(b)) { b[i] = null; return i; }
+    b[i] = null;
+  }
+  // Block an immediate player win
+  for (let i = 0; i < 9; i++) {
+    if (b[i]) continue;
+    b[i] = playerSymbol;
+    if (checkWin(b)) { b[i] = null; return i; }
+    b[i] = null;
+  }
+  return randomMove(b);
 }
 
 /* Minimax — always maximizes for cpuSymbol */
