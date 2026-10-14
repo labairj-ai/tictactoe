@@ -46,6 +46,22 @@
   .mode-btn:hover { border-color: #4a90d9; background: #1e2a3a; }
   .mode-btn .icon { font-size: 32px; display: block; margin-bottom: 8px; }
 
+  .mode-btn-full {
+    width: 100%;
+    margin-top: 12px;
+    padding: 18px 12px;
+    border: 2px solid #2d3748;
+    border-radius: 12px;
+    background: #1a202c;
+    color: #e2e8f0;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .mode-btn-full:hover { border-color: #68d391; background: #1a2a1e; }
+  .mode-btn-full .icon { font-size: 28px; display: inline; margin-right: 8px; }
+
   .symbol-btn .sym-glyph { font-size: 44px; display: block; margin-bottom: 6px; line-height: 1; }
   .symbol-btn.x-btn:hover { border-color: #fc8181; background: rgba(252,129,129,.08); }
   .symbol-btn.o-btn:hover { border-color: #63b3ed; background: rgba(99,179,237,.08); }
@@ -159,6 +175,45 @@
   /* ── Thinking indicator ── */
   .thinking { color: #4a5568; font-size: 12px; height: 16px; margin-top: -12px; margin-bottom: 8px; }
 
+  /* ── Online: room code display ── */
+  .room-code {
+    font-size: 44px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    color: #68d391;
+    background: #1a202c;
+    border: 2px solid #2d3748;
+    border-radius: 12px;
+    padding: 16px 24px;
+    margin: 12px 0;
+    cursor: pointer;
+    transition: border-color .15s;
+    display: inline-block;
+  }
+  .room-code:hover { border-color: #68d391; }
+
+  .room-input {
+    width: 220px;
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-align: center;
+    text-transform: uppercase;
+    background: #1a202c;
+    border: 2px solid #2d3748;
+    border-radius: 10px;
+    color: #e2e8f0;
+    padding: 12px 16px;
+    display: block;
+    margin: 16px auto;
+  }
+  .room-input:focus { outline: none; border-color: #4a90d9; }
+  .room-input::placeholder { color: #4a5568; letter-spacing: 0.12em; }
+
+  .join-error { color: #fc8181; font-size: 13px; min-height: 20px; margin-top: 6px; }
+
+  .copy-hint { font-size: 12px; color: #4a5568; margin-bottom: 16px; }
+
   /* Confetti canvas */
   #confetti-canvas {
     position: fixed; top: 0; left: 0;
@@ -183,6 +238,9 @@
         <span class="icon">👥</span>2 Players
       </button>
     </div>
+    <button class="mode-btn-full" onclick="show('online-screen')">
+      <span class="icon">🌐</span>Online Multiplayer
+    </button>
   </div>
 
   <!-- Symbol selection (cpu only) -->
@@ -199,6 +257,42 @@
       </button>
     </div>
     <button class="btn btn-ghost" style="margin-top:16px" onclick="show('mode-screen')">← Back</button>
+  </div>
+
+  <!-- Online: create or join -->
+  <div id="online-screen" style="display:none">
+    <p class="screen-label">Play against someone on another device</p>
+    <div class="mode-btns">
+      <button class="mode-btn" onclick="createOnlineGame()">
+        <span class="icon">🔗</span>Create Game
+      </button>
+      <button class="mode-btn" onclick="show('join-screen')">
+        <span class="icon">🎮</span>Join Game
+      </button>
+    </div>
+    <button class="btn btn-ghost" style="margin-top:16px" onclick="show('mode-screen')">← Back</button>
+  </div>
+
+  <!-- Online: waiting for opponent -->
+  <div id="waiting-screen" style="display:none">
+    <p class="screen-label">Share this code with your opponent</p>
+    <div class="room-code" id="room-code-display" onclick="copyCode(this)" title="Click to copy"></div>
+    <div class="copy-hint">Click code to copy · Share the link: <strong>tictactoe.tailb97cdb.ts.net</strong></div>
+    <div class="status" style="color:#a0aec0;margin-bottom:0">Waiting for opponent…</div>
+    <button class="btn btn-ghost" style="margin-top:20px" onclick="leaveOnline()">← Cancel</button>
+  </div>
+
+  <!-- Online: join with code -->
+  <div id="join-screen" style="display:none">
+    <p class="screen-label">Enter the game code</p>
+    <input type="text" id="room-input" class="room-input" placeholder="ABCDEF" maxlength="6"
+      oninput="this.value=this.value.toUpperCase()"
+      onkeydown="if(event.key==='Enter')joinOnlineGame()">
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="joinOnlineGame()">Join</button>
+      <button class="btn btn-ghost" onclick="show('online-screen')">← Back</button>
+    </div>
+    <div class="join-error" id="join-error"></div>
   </div>
 
   <!-- Game -->
@@ -234,19 +328,27 @@
 
     <div class="btn-row">
       <button class="btn btn-primary" onclick="resetBoard()">New Game</button>
-      <button class="btn btn-ghost" onclick="show('mode-screen')">Change Mode</button>
+      <button class="btn btn-ghost" onclick="changeMode()">Change Mode</button>
     </div>
   </div>
 </div>
 
 <script>
 const WINS = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+const ALL_SCREENS = ['mode-screen','symbol-screen','online-screen','waiting-screen','join-screen','game-screen'];
 
 let board, current, gameOver, mode, scores;
 let playerSymbol = 'X', cpuSymbol = 'O';
 
+// Online state
+let ws = null;
+let onlineSymbol = null;
+let roomCode = null;
+
+const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
+
 function show(id) {
-  ['mode-screen','symbol-screen','game-screen'].forEach(s =>
+  ALL_SCREENS.forEach(s =>
     document.getElementById(s).style.display = s === id ? 'block' : 'none'
   );
 }
@@ -263,31 +365,202 @@ function pickMode(m) {
     document.getElementById('name-x').textContent = 'X';
     document.getElementById('name-o').textContent = 'O';
     show('game-screen');
-    resetBoard();
+    doResetBoard();
   }
 }
 
 function pickSymbol(sym) {
   playerSymbol = sym;
   cpuSymbol = sym === 'X' ? 'O' : 'X';
-
-  // Score box labels — X column is always X, O column is always O
   if (playerSymbol === 'X') {
     document.getElementById('label-x').textContent = 'YOU';
     document.getElementById('label-o').textContent = 'CPU';
-    document.getElementById('name-x').textContent = 'X';
-    document.getElementById('name-o').textContent = 'O';
   } else {
     document.getElementById('label-x').textContent = 'CPU';
     document.getElementById('label-o').textContent = 'YOU';
-    document.getElementById('name-x').textContent = 'X';
-    document.getElementById('name-o').textContent = 'O';
   }
+  document.getElementById('name-x').textContent = 'X';
+  document.getElementById('name-o').textContent = 'O';
   show('game-screen');
-  resetBoard();
+  doResetBoard();
 }
 
+function changeMode() {
+  if (mode === 'online') {
+    leaveOnline();
+  } else {
+    show('mode-screen');
+  }
+}
+
+// ── Online multiplayer ──────────────────────────────────────
+
+function openWS() {
+  if (ws) { try { ws.close(); } catch(e) {} ws = null; }
+  ws = new WebSocket(WS_URL);
+  ws.onmessage = e => onWS(JSON.parse(e.data));
+  ws.onclose = () => {
+    if (mode === 'online') {
+      setStatus('Connection lost');
+      gameOver = true;
+      lockBoard(true);
+    }
+  };
+  return ws;
+}
+
+function createOnlineGame() {
+  const sock = openWS();
+  sock.onopen = () => sock.send(JSON.stringify({action: 'create'}));
+}
+
+function joinOnlineGame() {
+  const code = document.getElementById('room-input').value.trim().toUpperCase();
+  if (code.length < 4) { showJoinErr('Enter a valid code'); return; }
+  document.getElementById('join-error').textContent = '';
+  const sock = openWS();
+  sock.onopen = () => sock.send(JSON.stringify({action: 'join', room: code}));
+}
+
+function onWS(data) {
+  switch (data.t) {
+    case 'created':
+      roomCode = data.room;
+      onlineSymbol = data.sym;
+      document.getElementById('room-code-display').textContent = roomCode;
+      show('waiting-screen');
+      break;
+
+    case 'joined':
+      roomCode = data.room;
+      onlineSymbol = data.sym;
+      initOnlineGame(data.board, data.current, data.scores);
+      break;
+
+    case 'opponent_joined':
+      initOnlineGame(Array(9).fill(null), 'X', {X:0,O:0,D:0});
+      break;
+
+    case 'move':
+      applyServerMove(data);
+      break;
+
+    case 'reset':
+      scores = data.scores;
+      doResetBoard();
+      break;
+
+    case 'left':
+      setStatus('Opponent disconnected');
+      gameOver = true;
+      lockBoard(true);
+      break;
+
+    case 'error':
+      showJoinErr(data.msg);
+      if (ws) { try { ws.close(); } catch(e) {} ws = null; }
+      break;
+  }
+}
+
+function initOnlineGame(boardState, currentPlayer, scoresData) {
+  mode = 'online';
+  scores = Object.assign({}, scoresData);
+  board = boardState.slice();
+  current = currentPlayer;
+  gameOver = false;
+
+  document.getElementById('label-x').textContent = onlineSymbol === 'X' ? 'YOU' : 'THEM';
+  document.getElementById('label-o').textContent = onlineSymbol === 'O' ? 'YOU' : 'THEM';
+  document.getElementById('name-x').textContent = 'X';
+  document.getElementById('name-o').textContent = 'O';
+
+  show('game-screen');
+  renderOnlineBoard();
+  updateScoreDisplay();
+  setOnlineStatus();
+}
+
+function renderOnlineBoard() {
+  document.querySelectorAll('.cell').forEach((c, i) => {
+    c.className = 'cell';
+    c.textContent = '';
+    if (board[i]) {
+      c.textContent = board[i] === 'X' ? '✕' : '○';
+      c.classList.add(board[i].toLowerCase(), 'taken');
+    }
+  });
+  updateScoreHighlight();
+}
+
+function setOnlineStatus() {
+  if (gameOver) return;
+  setStatus(current === onlineSymbol ? 'Your turn' : "Opponent's turn");
+  updateScoreHighlight();
+}
+
+function applyServerMove(data) {
+  const player = data.sym;
+  board[data.cell] = player;
+  const cellEl = document.querySelectorAll('.cell')[data.cell];
+  cellEl.textContent = player === 'X' ? '✕' : '○';
+  cellEl.classList.add(player.toLowerCase(), 'taken', 'pop');
+
+  if (data.win) {
+    const winCells = data.win.map(idx => document.querySelectorAll('.cell')[idx]);
+    winCells.forEach(c => c.classList.add('win-cell-' + player.toLowerCase()));
+    gameOver = true;
+    lockBoard(true);
+    const isMe = player === onlineSymbol;
+    setStatus(isMe ? 'You win! 🎉' : 'Opponent wins', player === 'X' ? 'winner-x' : 'winner-o');
+    scores = data.scores;
+    updateScoreDisplay();
+    if (isMe) triggerConfetti(player, winCells);
+  } else if (!data.current) {
+    gameOver = true;
+    lockBoard(true);
+    setStatus("It's a draw", 'draw');
+    scores = data.scores;
+    updateScoreDisplay();
+  } else {
+    current = data.current;
+    scores = data.scores;
+    updateScoreDisplay();
+    setOnlineStatus();
+  }
+}
+
+function leaveOnline() {
+  if (ws) { try { ws.close(); } catch(e) {} ws = null; }
+  onlineSymbol = null;
+  roomCode = null;
+  mode = null;
+  show('mode-screen');
+}
+
+function copyCode(el) {
+  navigator.clipboard.writeText(el.textContent).then(() => {
+    const orig = el.style.color;
+    el.style.color = '#fff';
+    setTimeout(() => el.style.color = orig, 600);
+  });
+}
+
+function showJoinErr(msg) {
+  document.getElementById('join-error').textContent = msg;
+}
+
+// ── Local game ──────────────────────────────────────────────
+
 function resetBoard() {
+  if (mode === 'online') {
+    ws.send(JSON.stringify({action: 'reset'}));
+    return;
+  }
+  doResetBoard();
+}
+
+function doResetBoard() {
   board = Array(9).fill(null);
   current = 'X';
   gameOver = false;
@@ -295,7 +568,11 @@ function resetBoard() {
   document.getElementById('thinking').textContent = '';
   updateScoreDisplay();
 
-  // If player chose O, CPU (X) moves first
+  if (mode === 'online') {
+    setOnlineStatus();
+    return;
+  }
+
   if (mode === 'cpu' && cpuSymbol === 'X') {
     setStatus('');
     lockBoard(true);
@@ -331,6 +608,11 @@ function updateScoreDisplay() {
 function move(i) {
   if (gameOver || board[i]) return;
   if (mode === 'cpu' && current === cpuSymbol) return;
+  if (mode === 'online') {
+    if (current !== onlineSymbol) return;
+    ws.send(JSON.stringify({action: 'move', cell: i}));
+    return;
+  }
   placeMove(i, current);
   if (!gameOver && mode === 'cpu') {
     lockBoard(true);
