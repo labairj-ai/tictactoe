@@ -27,10 +27,9 @@
     margin-bottom: 4px;
   }
 
-  /* ── Mode picker ── */
-  #mode-screen { }
-  #mode-screen p { color: #718096; margin-bottom: 24px; font-size: 14px; }
+  .screen-label { color: #718096; font-size: 14px; margin: 8px 0 24px; }
 
+  /* ── Mode & symbol pickers ── */
   .mode-btns { display: flex; gap: 12px; justify-content: center; }
   .mode-btn {
     flex: 1;
@@ -46,6 +45,10 @@
   }
   .mode-btn:hover { border-color: #4a90d9; background: #1e2a3a; }
   .mode-btn .icon { font-size: 32px; display: block; margin-bottom: 8px; }
+
+  .symbol-btn .sym-glyph { font-size: 44px; display: block; margin-bottom: 6px; line-height: 1; }
+  .symbol-btn.x-btn:hover { border-color: #fc8181; background: rgba(252,129,129,.08); }
+  .symbol-btn.o-btn:hover { border-color: #63b3ed; background: rgba(99,179,237,.08); }
 
   /* ── Score bar ── */
   #game-screen { display: none; }
@@ -110,7 +113,6 @@
   .cell:hover:not(.taken):not(.locked) { background: #242c3a; border-color: #4a5568; }
   .cell.x { color: #fc8181; }
   .cell.o { color: #63b3ed; }
-  .cell.win-cell { background: #1e2a3a; border-color: #4a90d9; }
   .cell.win-cell-x {
     background: rgba(252,129,129,.15);
     border-color: #fc8181;
@@ -138,13 +140,6 @@
     100% { transform: scale(1); }
   }
 
-  /* Confetti canvas */
-  #confetti-canvas {
-    position: fixed; top: 0; left: 0;
-    width: 100%; height: 100%;
-    pointer-events: none; z-index: 999;
-  }
-
   /* ── Buttons ── */
   .btn-row { display: flex; gap: 10px; justify-content: center; }
   .btn {
@@ -163,6 +158,13 @@
 
   /* ── Thinking indicator ── */
   .thinking { color: #4a5568; font-size: 12px; height: 16px; margin-top: -12px; margin-bottom: 8px; }
+
+  /* Confetti canvas */
+  #confetti-canvas {
+    position: fixed; top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none; z-index: 999;
+  }
 </style>
 </head>
 <body>
@@ -172,34 +174,50 @@
 
   <!-- Mode selection -->
   <div id="mode-screen">
-    <p style="margin-top:8px">Choose a mode to start</p>
+    <p class="screen-label">Choose a mode to start</p>
     <div class="mode-btns">
-      <button class="mode-btn" onclick="startGame('cpu')">
+      <button class="mode-btn" onclick="pickMode('cpu')">
         <span class="icon">🤖</span>vs Computer
       </button>
-      <button class="mode-btn" onclick="startGame('2p')">
+      <button class="mode-btn" onclick="pickMode('2p')">
         <span class="icon">👥</span>2 Players
       </button>
     </div>
+  </div>
+
+  <!-- Symbol selection (cpu only) -->
+  <div id="symbol-screen" style="display:none">
+    <p class="screen-label">Play as…</p>
+    <div class="mode-btns">
+      <button class="mode-btn symbol-btn x-btn" onclick="pickSymbol('X')">
+        <span class="sym-glyph" style="color:#fc8181">✕</span>
+        X &nbsp;·&nbsp; Go first
+      </button>
+      <button class="mode-btn symbol-btn o-btn" onclick="pickSymbol('O')">
+        <span class="sym-glyph" style="color:#63b3ed">○</span>
+        O &nbsp;·&nbsp; Go second
+      </button>
+    </div>
+    <button class="btn btn-ghost" style="margin-top:16px" onclick="show('mode-screen')">← Back</button>
   </div>
 
   <!-- Game -->
   <div id="game-screen">
     <div class="score-bar">
       <div class="score-box x-box" id="score-x">
-        <div class="label">PLAYER</div>
+        <div class="label" id="label-x">PLAYER</div>
         <div class="name" id="name-x">X</div>
         <div class="val" id="val-x">0</div>
       </div>
       <div class="score-divider">DRAWS<br><span id="val-d" style="font-size:20px;font-weight:700;color:#a0aec0">0</span></div>
       <div class="score-box o-box" id="score-o">
-        <div class="label">PLAYER</div>
+        <div class="label" id="label-o">PLAYER</div>
         <div class="name" id="name-o">O</div>
         <div class="val" id="val-o">0</div>
       </div>
     </div>
 
-    <div class="status" id="status">Your turn</div>
+    <div class="status" id="status"></div>
     <div class="thinking" id="thinking"></div>
 
     <div class="board" id="board">
@@ -216,7 +234,7 @@
 
     <div class="btn-row">
       <button class="btn btn-primary" onclick="resetBoard()">New Game</button>
-      <button class="btn btn-ghost" onclick="changeMode()">Change Mode</button>
+      <button class="btn btn-ghost" onclick="show('mode-screen')">Change Mode</button>
     </div>
   </div>
 </div>
@@ -225,40 +243,72 @@
 const WINS = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
 
 let board, current, gameOver, mode, scores;
+let playerSymbol = 'X', cpuSymbol = 'O';
 
-function startGame(m) {
-  mode = m;
-  scores = { X: 0, O: 0, D: 0 };
-  document.getElementById('mode-screen').style.display = 'none';
-  document.getElementById('game-screen').style.display = 'block';
-  if (mode === 'cpu') {
-    document.getElementById('name-x').textContent = 'You';
-    document.getElementById('name-o').textContent = 'CPU';
-    document.querySelector('#score-x .label').textContent = 'PLAYER';
-    document.querySelector('#score-o .label').textContent = 'CPU';
-  } else {
-    document.getElementById('name-x').textContent = 'X';
-    document.getElementById('name-o').textContent = 'O';
-    document.querySelector('#score-x .label').textContent = 'PLAYER 1';
-    document.querySelector('#score-o .label').textContent = 'PLAYER 2';
-  }
-  resetBoard();
+function show(id) {
+  ['mode-screen','symbol-screen','game-screen'].forEach(s =>
+    document.getElementById(s).style.display = s === id ? 'block' : 'none'
+  );
 }
 
-function changeMode() {
-  document.getElementById('game-screen').style.display = 'none';
-  document.getElementById('mode-screen').style.display = 'block';
+function pickMode(m) {
+  mode = m;
+  scores = { X: 0, O: 0, D: 0 };
+  if (m === 'cpu') {
+    show('symbol-screen');
+  } else {
+    playerSymbol = 'X'; cpuSymbol = 'O';
+    document.getElementById('label-x').textContent = 'PLAYER 1';
+    document.getElementById('label-o').textContent = 'PLAYER 2';
+    document.getElementById('name-x').textContent = 'X';
+    document.getElementById('name-o').textContent = 'O';
+    show('game-screen');
+    resetBoard();
+  }
+}
+
+function pickSymbol(sym) {
+  playerSymbol = sym;
+  cpuSymbol = sym === 'X' ? 'O' : 'X';
+
+  // Score box labels — X column is always X, O column is always O
+  if (playerSymbol === 'X') {
+    document.getElementById('label-x').textContent = 'YOU';
+    document.getElementById('label-o').textContent = 'CPU';
+    document.getElementById('name-x').textContent = 'X';
+    document.getElementById('name-o').textContent = 'O';
+  } else {
+    document.getElementById('label-x').textContent = 'CPU';
+    document.getElementById('label-o').textContent = 'YOU';
+    document.getElementById('name-x').textContent = 'X';
+    document.getElementById('name-o').textContent = 'O';
+  }
+  show('game-screen');
+  resetBoard();
 }
 
 function resetBoard() {
   board = Array(9).fill(null);
   current = 'X';
   gameOver = false;
-  const cells = document.querySelectorAll('.cell');
-  cells.forEach(c => { c.textContent = ''; c.className = 'cell'; });
-  setStatus('');
+  document.querySelectorAll('.cell').forEach(c => { c.textContent = ''; c.className = 'cell'; });
   document.getElementById('thinking').textContent = '';
-  updateScoreHighlight();
+  updateScoreDisplay();
+
+  // If player chose O, CPU (X) moves first
+  if (mode === 'cpu' && cpuSymbol === 'X') {
+    setStatus('');
+    lockBoard(true);
+    document.getElementById('thinking').textContent = 'thinking…';
+    setTimeout(() => {
+      document.getElementById('thinking').textContent = '';
+      placeMove(bestMove(board), cpuSymbol);
+      lockBoard(false);
+    }, 400);
+  } else {
+    setStatus(mode === 'cpu' ? 'Your turn' : "Player 1 (X)'s turn");
+    updateScoreHighlight();
+  }
 }
 
 function setStatus(msg, cls) {
@@ -280,15 +330,14 @@ function updateScoreDisplay() {
 
 function move(i) {
   if (gameOver || board[i]) return;
-  if (mode === 'cpu' && current === 'O') return;
+  if (mode === 'cpu' && current === cpuSymbol) return;
   placeMove(i, current);
   if (!gameOver && mode === 'cpu') {
     lockBoard(true);
     document.getElementById('thinking').textContent = 'thinking…';
     setTimeout(() => {
       document.getElementById('thinking').textContent = '';
-      const best = bestMove(board);
-      placeMove(best, 'O');
+      placeMove(bestMove(board), cpuSymbol);
       lockBoard(false);
     }, 250);
   }
@@ -299,15 +348,19 @@ function placeMove(i, player) {
   const cell = document.querySelectorAll('.cell')[i];
   cell.textContent = player === 'X' ? '✕' : '○';
   cell.classList.add(player.toLowerCase(), 'taken', 'pop');
+
   const win = checkWin(board);
   if (win) {
-    const winClass = 'win-cell-' + player.toLowerCase();
     const winCells = win.map(idx => document.querySelectorAll('.cell')[idx]);
-    winCells.forEach(c => c.classList.add(winClass));
+    winCells.forEach(c => c.classList.add('win-cell-' + player.toLowerCase()));
     gameOver = true;
     lockBoard(true);
-    const isYou = mode === 'cpu' && player === 'X';
-    const label = mode === 'cpu' ? (isYou ? 'You win! 🎉' : 'CPU wins') : `Player ${player === 'X' ? '1' : '2'} wins!`;
+    let label;
+    if (mode === 'cpu') {
+      label = player === playerSymbol ? 'You win! 🎉' : 'CPU wins';
+    } else {
+      label = `Player ${player === 'X' ? '1' : '2'} wins!`;
+    }
     setStatus(label, player === 'X' ? 'winner-x' : 'winner-o');
     scores[player]++;
     updateScoreDisplay();
@@ -320,11 +373,10 @@ function placeMove(i, player) {
     updateScoreDisplay();
   } else {
     current = player === 'X' ? 'O' : 'X';
-    if (!gameOver) {
-      const turn = mode === 'cpu'
-        ? (current === 'X' ? 'Your turn' : '')
-        : `Player ${current === 'X' ? '1 (X)' : '2 (O)'}'s turn`;
-      setStatus(turn);
+    if (mode === 'cpu') {
+      setStatus(current === playerSymbol ? 'Your turn' : '');
+    } else {
+      setStatus(`Player ${current === 'X' ? '1 (X)' : '2 (O)'}'s turn`);
     }
     updateScoreHighlight();
   }
@@ -344,21 +396,21 @@ function checkWin(b) {
   return null;
 }
 
-/* Minimax with alpha-beta pruning */
-function score(b, depth) {
+/* Minimax — always maximizes for cpuSymbol */
+function scoreBoard(b, depth) {
   const w = checkWin(b);
-  if (w) return b[w[0]] === 'O' ? 10 - depth : depth - 10;
+  if (w) return b[w[0]] === cpuSymbol ? 10 - depth : depth - 10;
   return 0;
 }
 
-function minimax(b, depth, isMax, alpha, beta) {
-  const s = score(b, depth);
+function minimax(b, depth, isCpuTurn, alpha, beta) {
+  const s = scoreBoard(b, depth);
   if (s !== 0 || b.every(Boolean)) return s;
-  if (isMax) {
+  if (isCpuTurn) {
     let best = -Infinity;
     for (let i = 0; i < 9; i++) {
       if (b[i]) continue;
-      b[i] = 'O';
+      b[i] = cpuSymbol;
       best = Math.max(best, minimax(b, depth + 1, false, alpha, beta));
       b[i] = null;
       alpha = Math.max(alpha, best);
@@ -369,7 +421,7 @@ function minimax(b, depth, isMax, alpha, beta) {
     let best = Infinity;
     for (let i = 0; i < 9; i++) {
       if (b[i]) continue;
-      b[i] = 'X';
+      b[i] = playerSymbol;
       best = Math.min(best, minimax(b, depth + 1, true, alpha, beta));
       b[i] = null;
       beta = Math.min(beta, best);
@@ -380,15 +432,15 @@ function minimax(b, depth, isMax, alpha, beta) {
 }
 
 function bestMove(b) {
-  let best = -Infinity, move = -1;
+  let best = -Infinity, mv = -1;
   for (let i = 0; i < 9; i++) {
     if (b[i]) continue;
-    b[i] = 'O';
+    b[i] = cpuSymbol;
     const v = minimax(b, 0, false, -Infinity, Infinity);
     b[i] = null;
-    if (v > best) { best = v; move = i; }
+    if (v > best) { best = v; mv = i; }
   }
-  return move;
+  return mv;
 }
 
 function triggerConfetti(player, winCells) {
@@ -401,7 +453,6 @@ function triggerConfetti(player, winCells) {
     ? ['#fc8181','#f56565','#feb2b2','#fbd38d','#ffffff','#fc814a']
     : ['#63b3ed','#4299e1','#90cdf4','#76e4f7','#ffffff','#b794f4'];
 
-  // Launch from each winning cell's center
   const origins = winCells.map(c => {
     const r = c.getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
@@ -427,40 +478,26 @@ function triggerConfetti(player, winCells) {
 
   const duration = 2600;
   let start = null;
-
   function draw(ts) {
     if (!start) start = ts;
     const elapsed = ts - start;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-
     const progress = elapsed / duration;
     particles.forEach(p => {
-      p.x  += p.vx;
-      p.y  += p.vy;
-      p.vy += 0.38;
-      p.vx *= 0.985;
-      p.rot += p.rotV;
+      p.x += p.vx; p.y += p.vy; p.vy += 0.38; p.vx *= 0.985; p.rot += p.rotV;
       const alpha = Math.max(0, 1 - progress * 1.2);
-
       ctx.save();
       ctx.globalAlpha = alpha;
       ctx.fillStyle = p.color;
       ctx.translate(p.x, p.y);
       ctx.rotate(p.rot);
-      if (p.shape === 'rect') {
-        ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
-      } else {
-        ctx.beginPath();
-        ctx.arc(0, 0, p.size / 2, 0, Math.PI * 2);
-        ctx.fill();
-      }
+      if (p.shape === 'rect') ctx.fillRect(-p.size/2, -p.size/4, p.size, p.size/2);
+      else { ctx.beginPath(); ctx.arc(0, 0, p.size/2, 0, Math.PI*2); ctx.fill(); }
       ctx.restore();
     });
-
     if (elapsed < duration) requestAnimationFrame(draw);
     else ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
-
   requestAnimationFrame(draw);
 }
 </script>
